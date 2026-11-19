@@ -8,6 +8,10 @@
   --card: rgba(255, 255, 255, 0.04);
   --border: rgba(255, 255, 255, 0.08);
   --ivory: #f8fafc;
+  --dove: #94a3b8;
+  --lavender: #c4b5fd;
+  --mint: #10b981;
+  --coral: #fb7185;
 }
 
 html, body {
@@ -15,6 +19,19 @@ html, body {
   color: var(--ivory);
   -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Ambient glow orbs */
+.ambient::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 40% 30% at 20% 10%, rgba(168, 85, 247, 0.10), transparent 60%),
+    radial-gradient(ellipse 35% 30% at 85% 85%, rgba(244, 114, 182, 0.08), transparent 60%);
+  pointer-events: none;
 }
 
 @layer components {
@@ -22,7 +39,59 @@ html, body {
     @apply rounded-[28px] border border-white/[0.08] bg-white/[0.04] p-5;
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
-                0 20px 40px -20px rgba(0, 0, 0, 0.6);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 20px 40px -20px rgba(0, 0, 0, 0.6);
+  }
+  .pill {
+    @apply rounded-full border border-white/[0.08] bg-white/[0.04] px-4 py-2;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+  .label {
+    @apply text-[10px] uppercase tracking-widest text-slate-400 font-semibold;
+  }
+  .num {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    @apply tabular-nums;
+  }
+  .tile {
+    @apply rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 active:scale-[0.97] transition text-left;
   }
 }
+
+/* Satin Skeleton Shimmer */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.skeleton-box {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.skeleton-box::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  animation: shimmer 2s infinite;
+}
+
+/* Staggered Reveal */
+.reveal-up {
+  animation: revealUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+@keyframes revealUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.delay-1 { animation-delay: 40ms; }
+.delay-2 { animation-delay: 80ms; }
+.delay-3 { animation-delay: 120ms; }
+.delay-4 { animation-delay: 160ms; }
