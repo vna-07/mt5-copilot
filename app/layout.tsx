@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+// @ts-expect-error CSS imports are handled by Next.js at build time.
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 
