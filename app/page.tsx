@@ -169,7 +169,7 @@ export default function Home() {
         )}
 
         {/* Live Signal Card */}
-        {signal && <SignalCard signal={signal} balance={1000} isOffline={isOffline} />}
+        {signal && <SignalCard signal={signal} isOffline={isOffline} />}
 
         {/* Offline Safety Net (Read-only) */}
         {isOffline && lastSaved && (
