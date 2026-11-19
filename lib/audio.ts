@@ -27,7 +27,22 @@ const PRESETS: Record<string, Tone[]> = {
   offline: [
     { freq: 293.66, start: 0.00, dur: 0.15, gain: 0.08, type: "sine" },
     { freq: 220.00, start: 0.10, dur: 0.20, gain: 0.08, type: "sine" },
-  ]
+  ],
+  // --- Login flow ---
+  login_click: [{ freq: 720, start: 0, dur: 0.018, gain: 0.08, type: "sine" }],
+  login_hum: [
+    { freq: 320, start: 0, dur: 0.45, gain: 0.05, type: "triangle" },
+    { freq: 540, start: 0.1, dur: 0.35, gain: 0.05, type: "triangle" },
+  ],
+  login_success: [
+    { freq: 698.46, start: 0.00, dur: 0.15, gain: 0.10, type: "sine" },
+    { freq: 880.00, start: 0.08, dur: 0.15, gain: 0.10, type: "sine" },
+    { freq: 1046.50, start: 0.16, dur: 0.25, gain: 0.10, type: "sine" },
+  ],
+  login_error: [
+    { freq: 293.66, start: 0.00, dur: 0.15, gain: 0.08, type: "sine" },
+    { freq: 220.00, start: 0.12, dur: 0.20, gain: 0.08, type: "sine" },
+  ],
 };
 
 const HAPTICS = {
@@ -36,6 +51,11 @@ const HAPTICS = {
   unlock: [18, 35, 25],
   session: [35, 55, 35, 55, 70],
   offline: [100, 50, 100],
+  // --- Login flow (subtle for input, escalating for outcome) ---
+  login_click: 8,
+  login_hum: 15,
+  login_success: [18, 40, 28, 40, 60],
+  login_error: [120, 60, 120],
 };
 
 export function useSoundEffects() {
