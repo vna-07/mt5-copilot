@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import SignalCard from "@/components/SignalCard";
+import ActiveTradesDrawer from "@/components/ActiveTradesDrawer";
 import SkeletonLoader from "@/components/SkeletonLoader";
 import type { Signal } from "@/lib/types";
 import { Lock } from "lucide-react";
@@ -13,17 +14,19 @@ const MODES = [
 
 export default function Home() {
   const [mode, setMode] = useState<typeof MODES[number]["key"]>("intraday");
-  const [signal, setSignal] = useState<Signal | null>(null);
+  const [signals, setSignals] = useState<Signal[]>([]);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [activeTrades, setActiveTrades] = useState<string[]>([]);
   const [status, setStatus] = useState<any>(null);
   const [scanning, setScanning] = useState(true);
   const [clock, setClock] = useState("");
-  
+
   // Safety States
   const [isOffline, setIsOffline] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [lastSaved, setLastSaved] = useState<Signal | null>(null);
 
-  // 1. Live SAST Clock & Privacy Tracker
+  // 1. Live SAST Clock
   useEffect(() => {
     const tick = () => {
       const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Johannesburg", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date());
@@ -50,7 +53,7 @@ export default function Home() {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  // 3. Network Connectivity Guard
+  // 3. Network Connectivity Guard + Load persisted state
   useEffect(() => {
     const onOnline = () => setIsOffline(false);
     const onOffline = () => setIsOffline(true);
@@ -58,9 +61,13 @@ export default function Home() {
     window.addEventListener("offline", onOffline);
     if (!navigator.onLine) setIsOffline(true);
 
-    // Load last saved setup
+    // Load last saved setup (offline safety net)
     const saved = localStorage.getItem("copilot:lastSignal");
     if (saved) setLastSaved(JSON.parse(saved));
+
+    // Load active trades (babysitter state)
+    const trades = localStorage.getItem("copilot:activeTrades");
+    if (trades) setActiveTrades(JSON.parse(trades));
 
     return () => {
       window.removeEventListener("online", onOnline);
@@ -68,21 +75,29 @@ export default function Home() {
     };
   }, []);
 
-  // 4. Scan API
+  // 4. Scan API — now returns signals[]
   const scan = useCallback(async () => {
     setScanning(true);
     try {
-      const res = await fetch(`/api/scan?mode=${mode}&balance=1000&risk=1`);
+      const res = await fetch(
+        `/api/scan?mode=${mode}&balance=1000&risk=1&activeTrades=${activeTrades.join(",")}`
+      );
       if (!res.ok) throw new Error("Network response was not ok");
       const json = await res.json();
-      
-      setSignal(json.signal);
+
+      const newSignals: Signal[] = json.signals ?? [];
+      setSignals(newSignals);
       setStatus(json.status);
       setIsOffline(false);
 
-      if (json.signal) {
-        localStorage.setItem("copilot:lastSignal", JSON.stringify(json.signal));
-        setLastSaved(json.signal);
+      // Clamp active index to valid range — preserves user's viewing position
+      // across polls when possible, falls back to 0 if the queue shrank.
+      setActiveIdx((prev) => newSignals.length === 0 ? 0 : Math.min(prev, newSignals.length - 1));
+
+      // Keep the highest-confidence signal as the offline safety net
+      if (newSignals[0]) {
+        localStorage.setItem("copilot:lastSignal", JSON.stringify(newSignals[0]));
+        setLastSaved(newSignals[0]);
       }
     } catch (e) {
       console.error(e);
@@ -90,7 +105,7 @@ export default function Home() {
     } finally {
       setScanning(false);
     }
-  }, [mode]);
+  }, [mode, activeTrades]);
 
   useEffect(() => {
     scan();
@@ -98,13 +113,30 @@ export default function Home() {
     return () => clearInterval(int);
   }, [scan]);
 
+  // 5. Mark a signal as placed — moves it into the babysitter
+  const markAsPlaced = (symbol: string) => {
+    const next = [...activeTrades, symbol];
+    setActiveTrades(next);
+    localStorage.setItem("copilot:activeTrades", JSON.stringify(next));
+
+    // Remove from current queue + advance scanning state
+    setScanning(true);
+    setSignals((prev) => {
+      const remaining = prev.filter((s) => s.symbol !== symbol);
+      setActiveIdx((idx) => remaining.length === 0 ? 0 : Math.min(idx, remaining.length - 1));
+      return remaining;
+    });
+  };
+
+  const signal = signals[activeIdx] ?? null;
+
   // Render Privacy Curtain
   if (isLocked) {
     return (
       <main className="ambient fixed inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-2xl bg-[#09090e]/80">
         <p className="num text-5xl font-bold text-slate-200">{clock}</p>
         <p className="text-xs text-slate-500 tracking-widest uppercase mt-2 mb-8">SAST</p>
-        <button 
+        <button
           onClick={() => setIsLocked(false)}
           className="pill flex items-center gap-2 bg-violet-500/20 text-violet-200 border-violet-400/30 px-6 py-3"
         >
@@ -123,7 +155,7 @@ export default function Home() {
             <span className="num text-sm font-bold">{clock}</span>
             <span className="text-[10px] text-slate-500">SAST</span>
           </div>
-          
+
           <div className={`pill text-[10px] font-bold transition-colors duration-500 ${
             isOffline ? "text-amber-400 bg-amber-400/10 border-amber-400/20 animate-pulse" :
             status?.deadZone ? "text-rose-400" : "text-emerald-400"
@@ -148,6 +180,25 @@ export default function Home() {
         ))}
       </div>
 
+      {/* Multi-Signal Queue Pills */}
+      {signals.length > 1 && (
+        <div className="px-3 flex gap-2 overflow-x-auto pb-3 scrollbar-hide">
+          {signals.map((s, i) => (
+            <button
+              key={s.id}
+              onClick={() => setActiveIdx(i)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border transition ${
+                i === activeIdx
+                  ? "bg-violet-400/20 border-violet-400/40 text-violet-100"
+                  : "bg-white/5 border-white/10 text-slate-400"
+              }`}
+            >
+              {i + 1}. {s.symbol} {s.direction}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="px-3 mt-2">
         {/* Fail-Safe Notice */}
@@ -168,7 +219,7 @@ export default function Home() {
             </div>
             <p className="text-lg font-bold text-alabaster">Nothing to Do Right Now</p>
             <p className="text-sm text-slate-400 mt-2 leading-relaxed">
-              {status?.deadZone 
+              {status?.deadZone
                 ? "Forex banks are closed and spreads are wide. The safest trade is no trade."
                 : "The market is choppy or lacks clean volume right now. Stepping away protects your capital."}
             </p>
@@ -185,7 +236,13 @@ export default function Home() {
         )}
 
         {/* Live Signal Card */}
-        {signal && <SignalCard signal={signal} isOffline={isOffline} />}
+        {signal && (
+          <SignalCard
+            signal={signal}
+            isOffline={isOffline}
+            onPlaced={() => markAsPlaced(signal.symbol)}
+          />
+        )}
 
         {/* Offline Safety Net (Read-only) */}
         {isOffline && lastSaved && (
@@ -199,6 +256,9 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* The Babysitter Drawer */}
+      <ActiveTradesDrawer activeTrades={activeTrades} setActiveTrades={setActiveTrades} />
     </main>
   );
 }

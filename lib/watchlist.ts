@@ -1,10 +1,8 @@
 // lib/watchlist.ts
-// The 7 instruments we scan. Every field is used — verify pipValuePerLot
-// and pipSize against your broker before real money.
-
 import type { Instrument } from "./types";
 
 export const WATCHLIST: Instrument[] = [
+  // --- CORE FX ---
   {
     symbol: "EURUSD",
     mt5Symbol: "EURUSD",
@@ -12,7 +10,7 @@ export const WATCHLIST: Instrument[] = [
     category: "forex",
     digits: 5,
     pipSize: 0.0001,
-    pipValuePerLot: 10,      // ≈ $10 / pip per 1.00 lot
+    pipValuePerLot: 10,
     minLot: 0.01,
     lotStep: 0.01,
     maxSpread: 1.5,
@@ -40,7 +38,7 @@ export const WATCHLIST: Instrument[] = [
     category: "forex",
     digits: 3,
     pipSize: 0.01,
-    pipValuePerLot: 6.7,     // ≈ $6.70 / pip at ~150 USD/JPY
+    pipValuePerLot: 6.7,
     minLot: 0.01,
     lotStep: 0.01,
     maxSpread: 1.8,
@@ -48,26 +46,44 @@ export const WATCHLIST: Instrument[] = [
     dataSymbol: "USD/JPY",
   },
   {
+    symbol: "GBPJPY",
+    mt5Symbol: "GBPJPY",
+    name: "British Pound / Japanese Yen",
+    category: "forex",
+    digits: 3,
+    pipSize: 0.01,
+    pipValuePerLot: 6.7,
+    minLot: 0.01,
+    lotStep: 0.01,
+    maxSpread: 3.0,
+    sessions: ["london"],
+    dataSymbol: "GBP/JPY",
+  },
+
+  // --- METALS ---
+  {
     symbol: "XAUUSD",
     mt5Symbol: "XAUUSD",
     name: "Gold / US Dollar",
     category: "commodity",
     digits: 2,
-    pipSize: 0.01,           // 1 "point" on gold = 0.01
-    pipValuePerLot: 1,       // 1.00 lot × 0.01 move = $1
+    pipSize: 0.01,
+    pipValuePerLot: 1,
     minLot: 0.01,
     lotStep: 0.01,
-    maxSpread: 30,           // 30 points = $0.30
+    maxSpread: 30,
     sessions: ["london", "ny"],
     dataSymbol: "XAU/USD",
   },
+
+  // --- INDICES ---
   {
     symbol: "US100",
     mt5Symbol: "US100",
     name: "Nasdaq 100 Index",
     category: "index",
     digits: 1,
-    pipSize: 1,              // 1 index point
+    pipSize: 1,
     pipValuePerLot: 1,
     minLot: 0.01,
     lotStep: 0.01,
@@ -76,13 +92,59 @@ export const WATCHLIST: Instrument[] = [
     dataSymbol: "NDX",
   },
   {
+    symbol: "GER40",
+    mt5Symbol: "GER40",
+    name: "Germany 40 Index",
+    category: "index",
+    digits: 1,
+    pipSize: 1,
+    pipValuePerLot: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    maxSpread: 2.0,
+    sessions: ["london"],
+    dataSymbol: "DAX",
+  },
+
+  // --- CRYPTO (24/7) ---
+  {
+    symbol: "BTCUSD",
+    mt5Symbol: "BTCUSD",
+    name: "Bitcoin / US Dollar",
+    category: "crypto",
+    digits: 2,
+    pipSize: 1,
+    pipValuePerLot: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    maxSpread: 50,
+    sessions: ["asian", "london", "ny", "deadzone"], // Active 24/7
+    dataSymbol: "BTC/USD",
+  },
+  {
+    symbol: "ETHUSD",
+    mt5Symbol: "ETHUSD",
+    name: "Ethereum / US Dollar",
+    category: "crypto",
+    digits: 2,
+    pipSize: 0.1,
+    pipValuePerLot: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    maxSpread: 5,
+    sessions: ["asian", "london", "ny", "deadzone"], // Active 24/7
+    dataSymbol: "ETH/USD",
+  },
+
+  // --- SYNTHETICS ---
+  {
     symbol: "V25",
-    mt5Symbol: "Volatility 25 Index",
+    mt5Symbol: "Volatility 25 (1s)",
     name: "Deriv Volatility 25",
     category: "synthetic",
     digits: 2,
     pipSize: 0.01,
-    pipValuePerLot: 1,       // PLACEHOLDER — confirm in Deriv MT5 → Specification
+    pipValuePerLot: 0.005,
     minLot: 0.01,
     lotStep: 0.01,
     maxSpread: 5,
@@ -95,9 +157,9 @@ export const WATCHLIST: Instrument[] = [
     name: "Deriv Step Index",
     category: "synthetic",
     digits: 2,
-    pipSize: 0.1,            // Step Index ticks in 0.1 increments
-    pipValuePerLot: 1,       // PLACEHOLDER — confirm in Deriv MT5 → Specification
-    minLot: 0.01,
+    pipSize: 0.1,
+    pipValuePerLot: 0.1,
+    minLot: 0.1,
     lotStep: 0.01,
     maxSpread: 5,
     sessions: ["deadzone"],
@@ -106,8 +168,8 @@ export const WATCHLIST: Instrument[] = [
 ];
 
 export const SYNTHETICS = WATCHLIST.filter((i) => i.category === "synthetic");
+export const CRYPTO = WATCHLIST.filter((i) => i.category === "crypto");
 
-/** Look up by app symbol, e.g. "EURUSD". Returns undefined if unknown. */
 export function bySymbol(symbol: string): Instrument | undefined {
   return WATCHLIST.find((i) => i.symbol === symbol);
 }

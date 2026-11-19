@@ -17,20 +17,31 @@ const MODE_CFG: Record<Mode, { ltf: Timeframe; atrMult: number; minRr: number }>
   synthetic: { ltf: "5min", atrMult: 1.5, minRr: 1.5 },
 };
 
-// REDUCED to 2. (2 symbols * 2 timeframes = 4 API calls per scan. Safe for free tier).
-const MAX_SYMBOLS = 2;
+// Correlation groups — overlapping USD exposure triggers risk halving
+const USD_CORRELATED = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "US100"];
+
+// Raised from 2 → 4 per the multi-trade spec. (4 symbols × 2 TF = 8 API calls
+// per scan — stay under your free-tier quota if this grows further.)
+const MAX_SYMBOLS = 4;
 
 export async function GET(req: NextRequest) {
   // 1. Sanitize & Validate Inputs
   const modeParam = req.nextUrl.searchParams.get("mode") ?? "intraday";
   const validModes = ["scalp", "intraday", "synthetic"];
   const mode: Mode = validModes.includes(modeParam) ? (modeParam as Mode) : "intraday";
-  
+
   const rawBalance = Number(req.nextUrl.searchParams.get("balance") ?? 1000);
   const balance = isNaN(rawBalance) || rawBalance <= 0 ? 1000 : rawBalance;
 
   const rawRisk = Number(req.nextUrl.searchParams.get("risk") ?? 1);
   const riskPercent = isNaN(rawRisk) || rawRisk <= 0 || rawRisk > 5 ? 1 : rawRisk;
+
+  // Active trades — comma-separated app symbols, e.g. "EURUSD,XAUUSD"
+  const activeTradesParam = req.nextUrl.searchParams.get("activeTrades") ?? "";
+  const activeTrades = activeTradesParam
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
 
   const cfg = MODE_CFG[mode];
 
@@ -40,6 +51,7 @@ export async function GET(req: NextRequest) {
   // 2. Guardrail: Dead zone / weekend lockout
   if (mode !== "synthetic" && !status.scalpingEnabled) {
     return NextResponse.json({
+      signals: [],
       signal: null,
       note: status.note,
       provider: getProvider().name,
@@ -50,10 +62,14 @@ export async function GET(req: NextRequest) {
   // 3. Select Candidates
   const candidates = mode === "synthetic"
     ? WATCHLIST.filter((i) => i.category === "synthetic")
-    : status.recommended.map(bySymbol).filter((i): i is NonNullable<typeof i> => Boolean(i)).slice(0, MAX_SYMBOLS);
+    : status.recommended
+        .map(bySymbol)
+        .filter((i): i is NonNullable<typeof i> => Boolean(i))
+        .slice(0, MAX_SYMBOLS);
 
   if (!candidates.length) {
     return NextResponse.json({
+      signals: [],
       signal: null,
       note: "No tradable symbol for this session right now.",
       provider: getProvider().name,
@@ -63,11 +79,12 @@ export async function GET(req: NextRequest) {
 
   const provider = getProvider();
   const nowTs = Math.floor(now.getTime() / 1000);
+  // Session anchor only matters for scalp VWAP; other modes use full-series VWAP.
   const openTs = mode === "scalp" ? sessionOpenUnix(status.active[0]?.key ?? "ny", now) : 0;
 
   // 4. Run the scanner (with error tracking)
   let fetchErrors = 0;
-  
+
   const results = await Promise.allSettled(
     candidates.map(async (inst) => {
       try {
@@ -75,9 +92,25 @@ export async function GET(req: NextRequest) {
           provider.fetchCandles(inst, "1h", 220),
           provider.fetchCandles(inst, cfg.ltf, 320),
         ]);
-        
-        const raw = runScan({ mode, inst, htf, ltf, sessionOpenTs: openTs, nowTs });
+
+        // Live spread: use provider value if exposed, else simulate ~20% of max
+        const currentSpread = (inst as any).currentSpread ?? inst.maxSpread * 0.2;
+
+        const raw = runScan({
+          mode, inst, htf, ltf,
+          sessionOpenTs: openTs,
+          nowTs,
+          activeTrades,
+          currentSpread,
+        });
         if (!raw || raw.confidence < 0.7) return null;
+
+        // Correlation guard: halve risk if we already hold correlated USD exposure.
+        // Skipped for crypto (not USD-correlated in the intraday sense).
+        let effectiveRisk = riskPercent;
+        if (inst.category !== "crypto" && activeTrades.some((t) => USD_CORRELATED.includes(t))) {
+          effectiveRisk = riskPercent * 0.5;
+        }
 
         const currentPrice = ltf[ltf.length - 1].close;
         const plan = buildPlan({
@@ -88,7 +121,7 @@ export async function GET(req: NextRequest) {
           atr: raw.atr,
           currentPrice,
           accountBalance: balance,
-          riskPercent,
+          riskPercent: effectiveRisk,
           atrMultiplier: cfg.atrMult,
           minRr: cfg.minRr,
         });
@@ -130,31 +163,36 @@ export async function GET(req: NextRequest) {
     })
   );
 
-  // 5. Process Results
+  // 5. Process Results — sort by confidence, highest confluence first
   const signals = results
     .filter((r): r is PromiseFulfilledResult<Signal | null> => r.status === "fulfilled")
     .map((r) => r.value)
     .filter((s): s is Signal => Boolean(s))
     .sort((a, b) => b.confidence - a.confidence);
 
+  // Backward-compat: keep `signal` as the top-ranked one.
+  // Once page.tsx migrates to the `signals` array, this can be removed.
   const signal = signals[0] ?? null;
-  
-  // If all symbols failed due to network/API errors, warn the user
+
   const allFailed = fetchErrors === candidates.length;
-  const note = allFailed ? "Data feed error. Check API keys or connection." 
-             : signal ? null 
+  const note = allFailed ? "Data feed error. Check API keys or connection."
+             : signal ? null
              : "No setup yet — scanning…";
 
-  // 6. Return with Edge Caching
-  // (s-maxage=15 means Vercel will cache this exact request for 15 seconds. 
-  // This protects your API limits if multiple people open the app).
+  // 6. Return with Edge Caching.
+  // NOTE: cache key now varies by activeTrades — different users with different
+  // open positions get separate cache entries. Good (no cross-contamination),
+  // but means the cache warms more slowly under multi-user load.
   return NextResponse.json(
     {
-      signal,
+      signals,
+      signal,                 // ← kept for backward compat with page.tsx
       note,
       provider: provider.name,
       status,
       scanned: candidates.map((c) => c.symbol),
+      activeTrades,
+      riskAdjusted: activeTrades.length > 0,
     },
     {
       headers: {

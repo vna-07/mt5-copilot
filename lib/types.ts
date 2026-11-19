@@ -29,7 +29,7 @@ export type Instrument = {
   symbol: string;
   mt5Symbol: string;
   name: string;
-  category: "forex" | "commodity" | "index" | "synthetic";
+  category: "forex" | "commodity" | "index" | "synthetic" | "crypto";
   digits: number;
   pipSize: number;
   pipValuePerLot: number;

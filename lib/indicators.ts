@@ -92,3 +92,77 @@ export function roundTo(v: number, digits: number): number {
   const f = 10 ** digits;
   return Math.round(v * f) / f;
 }
+
+/**
+ * Wilder's Average Directional Index (ADX).
+ * Seeds with the first DX value at index `period*2`, then Wilder-smooths.
+ * Indices [0, period*2-1] are NaN (insufficient data).
+ */
+export function adxSeries(candles: Candle[], period = 14): number[] {
+  const n = candles.length;
+  const out = new Array(n).fill(NaN);
+  if (n < period * 2) return out;
+
+  const tr = new Array(n).fill(0), plusDM = new Array(n).fill(0), minusDM = new Array(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    tr[i] = Math.max(
+      candles[i].high - candles[i].low,
+      Math.abs(candles[i].high - candles[i - 1].close),
+      Math.abs(candles[i].low - candles[i - 1].close)
+    );
+    const up = candles[i].high - candles[i - 1].high;
+    const dn = candles[i - 1].low - candles[i].low;
+    plusDM[i] = up > dn && up > 0 ? up : 0;
+    minusDM[i] = dn > up && dn > 0 ? dn : 0;
+  }
+
+  let smoothTR = tr.slice(1, period + 1).reduce((a, b) => a + b, 0);
+  let smoothPlus = plusDM.slice(1, period + 1).reduce((a, b) => a + b, 0);
+  let smoothMinus = minusDM.slice(1, period + 1).reduce((a, b) => a + b, 0);
+
+  for (let i = period + 1; i < n; i++) {
+    smoothTR = smoothTR - (smoothTR / period) + tr[i];
+    smoothPlus = smoothPlus - (smoothPlus / period) + plusDM[i];
+    smoothMinus = smoothMinus - (smoothMinus / period) + minusDM[i];
+
+    const pDI = 100 * (smoothPlus / smoothTR);
+    const mDI = 100 * (smoothMinus / smoothTR);
+    const dx = 100 * Math.abs(pDI - mDI) / (pDI + mDI || 1);
+
+    if (i === period * 2) {
+      out[i] = dx; // Seed
+    } else if (i > period * 2) {
+      out[i] = (out[i - 1] * (period - 1) + dx) / period;
+    }
+  }
+  return out;
+}
+
+/**
+ * Wilder's Relative Strength Index (RSI).
+ * Seeds with SMA of gains/losses over the first `period` changes, then Wilder-smooths.
+ * Indices [0, period-1] are NaN (insufficient data).
+ */
+export function rsiSeries(candles: Candle[], period = 14): number[] {
+  const n = candles.length;
+  const out = new Array(n).fill(NaN);
+  if (n < period + 1) return out;
+
+  let gain = 0, loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = candles[i].close - candles[i - 1].close;
+    if (diff > 0) gain += diff; else loss -= diff;
+  }
+  gain /= period; loss /= period;
+  out[period] = 100 - (100 / (1 + (gain / (loss || 0.00001))));
+
+  for (let i = period + 1; i < n; i++) {
+    const diff = candles[i].close - candles[i - 1].close;
+    const g = diff > 0 ? diff : 0;
+    const l = diff < 0 ? -diff : 0;
+    gain = (gain * (period - 1) + g) / period;
+    loss = (loss * (period - 1) + l) / period;
+    out[i] = 100 - (100 / (1 + (gain / (loss || 0.00001))));
+  }
+  return out;
+}

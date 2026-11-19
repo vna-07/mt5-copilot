@@ -8,25 +8,32 @@ import { Check, Copy, Lock, X, ChevronDown, ShieldCheck } from "lucide-react";
 
 const f = (v: number, d: number) => v.toFixed(d);
 
-export default function SignalCard({ signal, isOffline }: { signal: Signal; isOffline: boolean }) {
+export default function SignalCard({
+  signal,
+  isOffline,
+  onPlaced,
+}: {
+  signal: Signal;
+  isOffline: boolean;
+  onPlaced: () => void;
+}) {
   const [checks, setChecks] = useState({ session: false, risk: false, mindset: false });
   const [showGuide, setShowGuide] = useState(false);
-  const [inTrade, setInTrade] = useState(false);
   const { play } = useSoundEffects();
   const unlocked = checks.session && checks.risk && checks.mindset;
   const d = signal.digits;
 
   const copy = async (val: string) => {
     if (isOffline) return;
-    try { 
-      await navigator.clipboard.writeText(val); 
+    try {
+      await navigator.clipboard.writeText(val);
       play("copy", "copy");
     } catch {}
   };
 
   const Tile = ({ label, value, tone }: { label: string; value: string, tone?: "mint"|"coral" }) => (
-    <button 
-      onClick={() => copy(value)} 
+    <button
+      onClick={() => copy(value)}
       disabled={isOffline}
       className={`tile group relative transition-all duration-300 ${isOffline ? "opacity-45 grayscale cursor-not-allowed" : ""}`}
     >
@@ -51,8 +58,8 @@ export default function SignalCard({ signal, isOffline }: { signal: Signal; isOf
           <span className={signal.direction === "BUY" ? "text-mint" : "text-coral"}>{signal.direction} {signal.symbol}</span> — {signal.setup}.
           <br />
           <span className="text-xs text-slate-400 font-normal mt-1 block">
-            {signal.direction === "BUY" 
-              ? "Price is bouncing off a safe floor. Let the green line lock in profit, and the red line protect your balance." 
+            {signal.direction === "BUY"
+              ? "Price is bouncing off a safe floor. Let the green line lock in profit, and the red line protect your balance."
               : "Price rejected a ceiling. Let the green line lock in profit, and the red line protect your balance."}
           </span>
         </p>
@@ -73,16 +80,12 @@ export default function SignalCard({ signal, isOffline }: { signal: Signal; isOf
           <div><span className="text-slate-500">RR:</span> <span className="num text-mint">1:{signal.rrTp1}</span></div>
         </div>
 
-        {/* Babysitting Button */}
+        {/* Placed Button — notifies parent to move this into the babysitter */}
         <button
-          onClick={() => { play("unlock", "unlock"); setInTrade(true); }}
-          className={`w-full mt-3 flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-bold transition-all ${
-            inTrade 
-              ? "bg-mint/10 border-mint/30 text-mint" 
-              : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
-          }`}
+          onClick={() => { play("unlock", "unlock"); onPlaced(); }}
+          className="w-full mt-3 flex items-center justify-center gap-2 rounded-xl bg-mint/10 border border-mint/30 py-3 text-sm font-bold text-mint transition-all hover:bg-mint/20 active:scale-95"
         >
-          <ShieldCheck size={16} /> {inTrade ? "Babysitting Active ✓" : "I'm In the Trade ✓"}
+          <ShieldCheck size={16} /> I've Placed This Trade on MT5
         </button>
 
         {/* Why Dropdown */}
@@ -120,7 +123,7 @@ export default function SignalCard({ signal, isOffline }: { signal: Signal; isOf
       </div>
 
       {/* Trigger for Slide-Up MT5 Guide */}
-      <button 
+      <button
         onClick={() => { if(unlocked) { play("unlock", "unlock"); setShowGuide(true); } }}
         disabled={!unlocked}
         className={`w-full rounded-2xl py-4 font-bold text-sm transition-all duration-300 ${
@@ -134,17 +137,17 @@ export default function SignalCard({ signal, isOffline }: { signal: Signal; isOf
       <AnimatePresence>
         {showGuide && (
           <>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setShowGuide(false)}
               className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-[32px] border-t border-white/10 bg-canvas p-6 pb-12 shadow-2xl"
             >
               <div className="mx-auto w-12 h-1.5 rounded-full bg-white/20 mb-6" />
-              
+
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-alabaster">MT5 Mobile Execution</h3>
                 <button onClick={() => setShowGuide(false)} className="p-2 bg-white/5 rounded-full text-slate-400"><X size={18} /></button>
