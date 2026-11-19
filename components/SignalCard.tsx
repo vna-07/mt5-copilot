@@ -4,13 +4,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import TradeChart from "./TradeChart";
 import { useSoundEffects } from "@/lib/audio";
 import type { Signal } from "@/lib/types";
-import { Check, Copy, Lock, X } from "lucide-react";
+import { Check, Copy, Lock, X, ChevronDown, ShieldCheck } from "lucide-react";
 
 const f = (v: number, d: number) => v.toFixed(d);
 
 export default function SignalCard({ signal, isOffline }: { signal: Signal; isOffline: boolean }) {
   const [checks, setChecks] = useState({ session: false, risk: false, mindset: false });
   const [showGuide, setShowGuide] = useState(false);
+  const [inTrade, setInTrade] = useState(false);
   const { play } = useSoundEffects();
   const unlocked = checks.session && checks.risk && checks.mindset;
   const d = signal.digits;
@@ -71,6 +72,33 @@ export default function SignalCard({ signal, isOffline }: { signal: Signal; isOf
           <div><span className="text-slate-500">Risk:</span> <span className="num text-alabaster">${signal.actualRiskUsd.toFixed(2)}</span></div>
           <div><span className="text-slate-500">RR:</span> <span className="num text-mint">1:{signal.rrTp1}</span></div>
         </div>
+
+        {/* Babysitting Button */}
+        <button
+          onClick={() => { play("unlock", "unlock"); setInTrade(true); }}
+          className={`w-full mt-3 flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-bold transition-all ${
+            inTrade 
+              ? "bg-mint/10 border-mint/30 text-mint" 
+              : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+          }`}
+        >
+          <ShieldCheck size={16} /> {inTrade ? "Babysitting Active ✓" : "I'm In the Trade ✓"}
+        </button>
+
+        {/* Why Dropdown */}
+        <details className="mt-3 group">
+          <summary className="flex items-center justify-between cursor-pointer p-3 rounded-xl bg-white/5 border border-white/10 text-xs font-semibold text-slate-400 group-open:rounded-b-none group-open:border-b-transparent transition-all">
+            Why did the bot take this?
+            <ChevronDown size={14} className="group-open:rotate-180 transition-transform" />
+          </summary>
+          <div className="p-3 rounded-b-xl bg-white/5 border border-white/10 border-t-0 text-xs text-slate-400 leading-relaxed space-y-2">
+            {signal.reasons.map((r, i) => (
+              <p key={i} className="flex gap-2">
+                <span className="text-lavender">•</span> {r}
+              </p>
+            ))}
+          </div>
+        </details>
       </div>
 
       <div className="bento">

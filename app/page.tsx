@@ -160,11 +160,27 @@ export default function Home() {
         {/* Skeleton Loader */}
         {scanning && !signal && <SkeletonLoader />}
 
-        {/* No Setup Yet */}
+        {/* Anti-FOMO Standby Screen */}
         {!scanning && !signal && !isOffline && (
-          <div className="bento text-center py-12 animate-in fade-in">
-            <p className="text-lg font-bold text-slate-200">No Setup Yet</p>
-            <p className="text-xs text-slate-400 mt-2">{status?.note || "Waiting for a valid pullback."}</p>
+          <div className="bento text-center py-10 px-6 animate-in fade-in">
+            <div className="h-12 w-12 rounded-full bg-lavender/10 flex items-center justify-center mx-auto mb-4">
+              <span className="text-xl">☕</span>
+            </div>
+            <p className="text-lg font-bold text-alabaster">Nothing to Do Right Now</p>
+            <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+              {status?.deadZone 
+                ? "Forex banks are closed and spreads are wide. The safest trade is no trade."
+                : "The market is choppy or lacks clean volume right now. Stepping away protects your capital."}
+            </p>
+            {status?.upcoming?.[0] && (
+              <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-4 py-2">
+                <span className="text-xs text-slate-400">Next session:</span>
+                <span className="text-xs font-bold text-lavender">
+                  {status.upcoming[0].label} in {status.upcoming[0].startsIn}
+                </span>
+              </div>
+            )}
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-6">I'll ping your phone when it's time.</p>
           </div>
         )}
 
