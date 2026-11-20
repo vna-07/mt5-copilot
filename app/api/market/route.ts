@@ -5,6 +5,8 @@ import { adxSeries, atrSeries, ema, rsiSeries, stdev, vwapSeries, last } from "@
 import { readSettings } from "@/lib/settings";
 import type { Instrument } from "@/lib/types";
 
+export const maxDuration = 20;
+
 const TF: Record<string, Timeframe> = {
   M1: "1min",
   M5: "5min",

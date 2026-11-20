@@ -52,24 +52,48 @@ export default function MarketPage() {
   const [tf, setTf] = useState("M15");
   const [data, setData] = useState<MarketData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setError(null);
     fetch(`/api/market?symbol=${symbol}&tf=${tf}`)
-      .then((res) => res.json())
-      .then((json) => { if (active) setData(json); })
+      .then(async (res) => {
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.candles || !json?.telemetry || !json?.margin) {
+          throw new Error(json?.error || "Market data is currently unavailable.");
+        }
+        if (active) setData(json as MarketData);
+      })
+      .catch((cause) => {
+        if (active) {
+          setData(null);
+          setError(cause instanceof Error ? cause.message : "Market data is currently unavailable.");
+        }
+      })
       .finally(() => { if (active) setLoading(false); });
     const interval = setInterval(() => {
       fetch(`/api/market?symbol=${symbol}&tf=${tf}`)
-        .then((res) => res.json())
-        .then((json) => setData(json));
+        .then(async (res) => {
+          const json = await res.json().catch(() => null);
+          if (!res.ok || !json?.candles || !json?.telemetry || !json?.margin) {
+            throw new Error(json?.error || "Market data is currently unavailable.");
+          }
+          if (active) {
+            setData(json as MarketData);
+            setError(null);
+          }
+        })
+        .catch((cause) => {
+          if (active) setError(cause instanceof Error ? cause.message : "Market data is currently unavailable.");
+        });
     }, 30000);
     return () => { active = false; clearInterval(interval); };
   }, [symbol, tf]);
 
-  const last = data?.candles[data.candles.length - 1];
+  const last = data?.candles?.[data.candles.length - 1];
   const story = data ? buildPlainEnglishMarketStory({
     symbol: data.name,
     regime: data.telemetry.regime,
@@ -133,6 +157,15 @@ export default function MarketPage() {
 
       <section className="bento mt-3 p-3">
         {loading && <p className="py-8 text-center text-xs text-slate-500">Loading market chart...</p>}
+        {!loading && error && (
+          <div className="py-8 text-center">
+            <p className="text-sm font-bold text-alabaster">Live market data is unavailable</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-400">{error}</p>
+            <p className="mt-3 text-[10px] uppercase tracking-wider text-amber-300">
+              No trade decision should be made from unavailable data.
+            </p>
+          </div>
+        )}
         {data && last && (
           <TradeChart
             id={`${symbol}-${tf}`}

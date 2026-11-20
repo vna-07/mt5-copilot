@@ -13,6 +13,17 @@ export interface DataProvider {
 }
 
 const tfSec = (tf: Timeframe) => (tf === "4h" ? 14400 : tf === "1h" ? 3600 : tf === "15min" ? 900 : tf === "5min" ? 300 : 60);
+const UPSTREAM_TIMEOUT_MS = 12_000;
+
+async function fetchUpstream(input: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  try {
+    return await fetch(input, { cache: "no-store", signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 const BASE: Record<string, number> = { EURUSD: 1.085, GBPUSD: 1.27, USDJPY: 150.2, EURJPY: 165.2, AUDJPY: 98.5, GBPJPY: 188.4, XAUUSD: 2350, US100: 18500, US500: 5200, GER40: 18200, BTCUSD: 65000, ETHUSD: 3500, SOLUSD: 150, V25: 2500, STEP: 9000 };
 
@@ -56,7 +67,7 @@ const twelve: DataProvider = {
     if (hit && Date.now() - hit.at < TTL) return hit.data;
 
     const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(inst.dataSymbol)}&interval=${tf}&outputsize=${count}&timezone=UTC&apikey=${key}`;
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetchUpstream(url);
     const json = await res.json();
     
     if (json.status === "error" || !json.values?.length) throw new Error(`twelvedata error: ${json.message}`);
