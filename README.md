@@ -15,6 +15,10 @@ Copy `.env.example` to `.env.local`, then configure the values below. Never comm
 - `ECONOMIC_NEWS_API_URL`: Optional JSON endpoint providing economic releases.
 - `FINNHUB_API_KEY`: Optional Finnhub API key. The status endpoint builds the 7-day economic-calendar URL automatically.
 
+The trade watcher endpoint (`/api/trades/watcher`) is protected by `CRON_SECRET`. Vercel Hobby only
+supports daily cron schedules, so call this endpoint from an external scheduler every 1–5 minutes
+using either `Authorization: Bearer <CRON_SECRET>` or `x-cron-secret: <CRON_SECRET>`.
+
 Generate VAPID keys:
 
 ```powershell
