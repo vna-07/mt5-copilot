@@ -55,6 +55,7 @@ const mockProvider: DataProvider = {
 };
 
 const cache = new Map<string, { at: number; data: Candle[] }>();
+const inFlight = new Map<string, Promise<Candle[]>>();
 const TTL = 55_000;
 
 const twelve: DataProvider = {
@@ -62,23 +63,44 @@ const twelve: DataProvider = {
   spreadStatus: "ESTIMATED",
   async fetchCandles(inst, tf, count) {
     const key = process.env.TWELVEDATA_API_KEY!;
-    const ck = `${inst.symbol}:${tf}:${count}`;
+    const ck = `${inst.symbol}:${tf}`;
     const hit = cache.get(ck);
-    if (hit && Date.now() - hit.at < TTL) return hit.data;
+    if (hit && Date.now() - hit.at < TTL && hit.data.length >= count) {
+      return hit.data.slice(-count);
+    }
 
-    const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(inst.dataSymbol)}&interval=${tf}&outputsize=${count}&timezone=UTC&apikey=${key}`;
-    const res = await fetchUpstream(url);
-    const json = await res.json();
-    
-    if (json.status === "error" || !json.values?.length) throw new Error(`twelvedata error: ${json.message}`);
-    
-    const data: Candle[] = json.values.map((v: any) => ({
-      time: Math.floor(Date.parse(v.datetime.replace(" ", "T") + "Z") / 1000),
-      open: Number(v.open), high: Number(v.high), low: Number(v.low), close: Number(v.close), volume: v.volume ? Number(v.volume) : 1,
-    })).sort((a: any, b: any) => a.time - b.time);
+    const pending = inFlight.get(ck);
+    if (pending) {
+      const data = await pending;
+      return data.slice(-count);
+    }
 
-    cache.set(ck, { at: Date.now(), data });
-    return data;
+    const request = (async () => {
+      const outputsize = Math.max(count, 320);
+      const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(inst.dataSymbol)}&interval=${tf}&outputsize=${outputsize}&timezone=UTC&apikey=${key}`;
+      const res = await fetchUpstream(url);
+      const json = await res.json();
+
+      if (json.status === "error" || !json.values?.length) {
+        throw new Error(`twelvedata error: ${json.message}`);
+      }
+
+      const data: Candle[] = json.values.map((v: any) => ({
+        time: Math.floor(Date.parse(v.datetime.replace(" ", "T") + "Z") / 1000),
+        open: Number(v.open), high: Number(v.high), low: Number(v.low), close: Number(v.close), volume: v.volume ? Number(v.volume) : 1,
+      })).sort((a: any, b: any) => a.time - b.time);
+
+      cache.set(ck, { at: Date.now(), data });
+      return data;
+    })();
+
+    inFlight.set(ck, request);
+    try {
+      const data = await request;
+      return data.slice(-count);
+    } finally {
+      inFlight.delete(ck);
+    }
   },
 };
 
