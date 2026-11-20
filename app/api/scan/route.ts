@@ -7,6 +7,7 @@ import { buildPlan } from "@/lib/risk";
 import { buildMt5Steps } from "@/lib/mt5";
 import type { Mode, Signal } from "@/lib/types";
 import { readSettings } from "@/lib/settings";
+import { fetchEconomicEvents, findNewsBlackout } from "@/lib/news";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -81,6 +82,8 @@ export async function GET(req: NextRequest) {
 
   const provider = getProvider();
   const nowTs = Math.floor(now.getTime() / 1000);
+  const economicEvents = await fetchEconomicEvents();
+  const newsLocked: string[] = [];
   // Session anchor only matters for scalp VWAP; other modes use full-series VWAP.
   const openTs = mode === "scalp" ? sessionOpenUnix(status.active[0]?.key ?? "ny", now) : 0;
 
@@ -90,6 +93,11 @@ export async function GET(req: NextRequest) {
   const results = await Promise.allSettled(
     candidates.map(async (inst) => {
       try {
+        const newsBlackout = findNewsBlackout(economicEvents, inst, now);
+        if (newsBlackout) {
+          newsLocked.push(inst.symbol);
+          return null;
+        }
         const [htf, ltf] = await Promise.all([
           provider.fetchCandles(inst, "1h", 220),
           provider.fetchCandles(inst, cfg.ltf, 320),
@@ -179,6 +187,7 @@ export async function GET(req: NextRequest) {
 
   const allFailed = fetchErrors === candidates.length;
   const note = allFailed ? "Data feed error. Check API keys or connection."
+             : newsLocked.length === candidates.length ? "High-impact news blackout — no new entries."
              : signal ? null
              : "No setup yet — scanning…";
 
@@ -196,6 +205,7 @@ export async function GET(req: NextRequest) {
       scanned: candidates.map((c) => c.symbol),
       activeTrades,
       riskAdjusted: activeTrades.length > 0,
+      newsLocked,
     },
     {
       headers: {

@@ -23,6 +23,7 @@ export default function Home() {
   const [scanning, setScanning] = useState(true);
   const [clock, setClock] = useState("");
   const [providerName, setProviderName] = useState("demo");
+  const [newsLocked, setNewsLocked] = useState<string[]>([]);
 
   // Safety States
   const [isOffline, setIsOffline] = useState(false);
@@ -98,6 +99,7 @@ export default function Home() {
       setSignals(newSignals);
       setStatus(json.status);
       setProviderName(json.provider ?? "demo");
+      setNewsLocked(json.newsLocked ?? []);
       setIsOffline(false);
 
       // Clamp active index to valid range — preserves user's viewing position
@@ -314,7 +316,9 @@ export default function Home() {
             </div>
             <p className="text-lg font-bold text-alabaster">Nothing to Do Right Now</p>
             <p className="text-sm text-slate-400 mt-2 leading-relaxed">
-              {status?.deadZone
+              {newsLocked.length > 0
+                ? `High-impact economic news blackout active for ${newsLocked.join(", ")}. No new entries are allowed for 15 minutes before through 10 minutes after the release.`
+                : status?.deadZone
                 ? "Forex banks are closed and spreads are wide. The safest trade is no trade."
                 : "The market is choppy or lacks clean volume right now. Stepping away protects your capital."}
             </p>
