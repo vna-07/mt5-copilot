@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LineChart, Smartphone, BookOpen } from "lucide-react";
+import { LineChart, Activity, Smartphone, BookOpen } from "lucide-react";
 
 const ITEMS = [
   { href: "/", label: "Trade", icon: LineChart },
+  { href: "/market", label: "Live Flow", icon: Activity },
   { href: "/guide", label: "MT5 Guide", icon: Smartphone },
   { href: "/journal", label: "Journal", icon: BookOpen },
 ];

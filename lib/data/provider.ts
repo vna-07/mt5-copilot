@@ -3,7 +3,7 @@ import type { Candle, Instrument } from "../types";
 import { roundTo } from "../indicators";
 import WebSocket from "ws";
 
-export type Timeframe = "5min" | "15min" | "1h" | "4h";
+export type Timeframe = "1min" | "5min" | "15min" | "1h" | "4h";
 
 export interface DataProvider {
   name: string;
@@ -12,7 +12,7 @@ export interface DataProvider {
   fetchQuote?(inst: Instrument): Promise<{ bid: number; ask: number } | null>;
 }
 
-const tfSec = (tf: Timeframe) => (tf === "4h" ? 14400 : tf === "1h" ? 3600 : tf === "15min" ? 900 : 300);
+const tfSec = (tf: Timeframe) => (tf === "4h" ? 14400 : tf === "1h" ? 3600 : tf === "15min" ? 900 : tf === "5min" ? 300 : 60);
 
 const BASE: Record<string, number> = { EURUSD: 1.085, GBPUSD: 1.27, USDJPY: 150.2, EURJPY: 165.2, AUDJPY: 98.5, GBPJPY: 188.4, XAUUSD: 2350, US100: 18500, US500: 5200, GER40: 18200, BTCUSD: 65000, ETHUSD: 3500, SOLUSD: 150, V25: 2500, STEP: 9000 };
 
@@ -124,7 +124,7 @@ const deriv: DataProvider = {
   async fetchCandles(inst, tf, count) {
     const symbol = derivSymbol(inst);
     if (!symbol) throw new Error(`Deriv has no verified symbol mapping for ${inst.symbol}`);
-    const granularity = tf === "4h" ? 14400 : tf === "1h" ? 3600 : tf === "15min" ? 900 : 300;
+    const granularity = tf === "4h" ? 14400 : tf === "1h" ? 3600 : tf === "15min" ? 900 : tf === "5min" ? 300 : 60;
     const json = await derivRequest({
       ticks_history: symbol,
       style: "candles",
