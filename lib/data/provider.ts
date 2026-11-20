@@ -15,11 +15,11 @@ export interface DataProvider {
 const tfSec = (tf: Timeframe) => (tf === "4h" ? 14400 : tf === "1h" ? 3600 : tf === "15min" ? 900 : tf === "5min" ? 300 : 60);
 const UPSTREAM_TIMEOUT_MS = 12_000;
 
-async function fetchUpstream(input: string): Promise<Response> {
+async function fetchUpstream(input: string, init: RequestInit = {}): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   try {
-    return await fetch(input, { cache: "no-store", signal: controller.signal });
+    return await fetch(input, { ...init, cache: "no-store", signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
@@ -78,7 +78,7 @@ const twelve: DataProvider = {
     const request = (async () => {
       const outputsize = Math.max(count, 320);
       const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(inst.dataSymbol)}&interval=${tf}&outputsize=${outputsize}&timezone=UTC&apikey=${key}`;
-      const res = await fetchUpstream(url);
+      const res = await fetchUpstream(url, { headers: { Authorization: `Token ${key}` } });
       const json = await res.json();
 
       if (json.status === "error" || !json.values?.length) {
@@ -101,6 +101,48 @@ const twelve: DataProvider = {
     } finally {
       inFlight.delete(ck);
     }
+  },
+};
+
+const tiingo: DataProvider = {
+  name: "tiingo",
+  spreadStatus: "ESTIMATED",
+  async fetchCandles(inst, tf, count) {
+    const key = process.env.TIINGO_FOREX_API_KEY;
+    if (!key) throw new Error("TIINGO_FOREX_API_KEY is not configured");
+    const resampleFreq = tf === "4h" ? "4hour" : tf === "1h" ? "1hour" : tf;
+    const startDate = new Date(Date.now() - tfSec(tf) * count * 1.25 * 1000).toISOString();
+    const ticker = inst.dataSymbol.replace("/", "").toLowerCase();
+    const url = `https://api.tiingo.com/tiingo/fx/${encodeURIComponent(ticker)}/prices?startDate=${encodeURIComponent(startDate)}&resampleFreq=${resampleFreq}`;
+    const res = await fetchUpstream(url, { headers: { Authorization: `Token ${key}` } });
+    const json = await res.json();
+
+    if (!res.ok || !Array.isArray(json) || !json.length) {
+      throw new Error(`tiingo error: ${json?.detail || json?.message || res.statusText}`);
+    }
+
+    return json.map((v: any) => ({
+      time: Math.floor(Date.parse(v.date) / 1000),
+      open: roundTo(Number(v.open), inst.digits),
+      high: roundTo(Number(v.high), inst.digits),
+      low: roundTo(Number(v.low), inst.digits),
+      close: roundTo(Number(v.close), inst.digits),
+      volume: v.volume ? Number(v.volume) : 1,
+    })).sort((a: Candle, b: Candle) => a.time - b.time).slice(-count);
+  },
+  async fetchQuote(inst) {
+    const key = process.env.TIINGO_FOREX_API_KEY;
+    if (!key) return null;
+    const ticker = inst.dataSymbol.replace("/", "").toLowerCase();
+    const res = await fetchUpstream(
+      `https://api.tiingo.com/tiingo/fx/${encodeURIComponent(ticker)}/top`,
+      { headers: { Authorization: `Token ${key}` } }
+    );
+    const json = await res.json();
+    const quote = Array.isArray(json) ? json[0] : json;
+    const bid = Number(quote?.bidPrice);
+    const ask = Number(quote?.askPrice);
+    return Number.isFinite(bid) && Number.isFinite(ask) ? { bid, ask } : null;
   },
 };
 
@@ -202,8 +244,32 @@ const twelveOrDeriv: DataProvider = {
   },
 };
 
+const tiingoOrDeriv: DataProvider = {
+  name: "tiingo/deriv",
+  spreadStatus: "ESTIMATED",
+  async fetchCandles(inst, tf, count) {
+    if (inst.category === "synthetic" || inst.category === "crypto") {
+      if (derivSymbol(inst)) return deriv.fetchCandles(inst, tf, count);
+      return twelve.fetchCandles(inst, tf, count);
+    }
+    if (inst.category === "forex" || inst.category === "commodity") {
+      return tiingo.fetchCandles(inst, tf, count);
+    }
+    return twelve.fetchCandles(inst, tf, count);
+  },
+  async fetchQuote(inst) {
+    if (derivSymbol(inst)) return deriv.fetchQuote?.(inst) ?? null;
+    if (inst.category === "forex" || inst.category === "commodity") {
+      return tiingo.fetchQuote?.(inst) ?? null;
+    }
+    return null;
+  },
+};
+
 export function getProvider(): DataProvider {
+  if (process.env.TIINGO_FOREX_API_KEY && process.env.DERIV_APP_ID) return tiingoOrDeriv;
   if (process.env.DERIV_APP_ID && process.env.TWELVEDATA_API_KEY) return twelveOrDeriv;
   if (process.env.DERIV_APP_ID) return deriv;
+  if (process.env.TIINGO_FOREX_API_KEY) return tiingo;
   return process.env.TWELVEDATA_API_KEY ? twelve : mockProvider;
 }

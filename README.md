@@ -5,6 +5,8 @@
 Copy `.env.example` to `.env.local`, then configure the values below. Never commit `.env.local` or post secret values in chat.
 
 - `TWELVEDATA_API_KEY`: Twelve Data API key for candles.
+- `TIINGO_FOREX_API_KEY`: Tiingo Forex API key for forex and commodity candles. This is preferred over Twelve Data when configured.
+- `TIINGO_CRYPTO_API_KEY`: Reserved for a future Tiingo crypto adapter; it is not currently used.
 - `DERIV_APP_ID`: Public Deriv application ID for the synthetic-index WebSocket adapter.
 - `DERIV_API_TOKEN`: Optional private Deriv authorization token. Public candle data may not require this; keep it server-only.
 - `APP_ACCESS_CODE`: Four-digit private app login code.
