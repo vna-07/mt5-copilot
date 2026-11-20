@@ -6,6 +6,7 @@ import { runScan } from "@/lib/scanners";
 import { buildPlan } from "@/lib/risk";
 import { buildMt5Steps } from "@/lib/mt5";
 import type { Mode, Signal } from "@/lib/types";
+import { readSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -14,6 +15,7 @@ export const maxDuration = 30;
 const MODE_CFG: Record<Mode, { ltf: Timeframe; atrMult: number; minRr: number }> = {
   scalp: { ltf: "5min", atrMult: 1.0, minRr: 1.5 },
   intraday: { ltf: "15min", atrMult: 1.5, minRr: 2.0 },
+  swing: { ltf: "1h", atrMult: 2.0, minRr: 2.5 },
   synthetic: { ltf: "5min", atrMult: 1.5, minRr: 1.5 },
 };
 
@@ -27,14 +29,14 @@ const MAX_SYMBOLS = 4;
 export async function GET(req: NextRequest) {
   // 1. Sanitize & Validate Inputs
   const modeParam = req.nextUrl.searchParams.get("mode") ?? "intraday";
-  const validModes = ["scalp", "intraday", "synthetic"];
+  const validModes = ["scalp", "intraday", "swing", "synthetic"];
   const mode: Mode = validModes.includes(modeParam) ? (modeParam as Mode) : "intraday";
 
-  const rawBalance = Number(req.nextUrl.searchParams.get("balance") ?? 1000);
-  const balance = isNaN(rawBalance) || rawBalance <= 0 ? 1000 : rawBalance;
-
-  const rawRisk = Number(req.nextUrl.searchParams.get("risk") ?? 1);
-  const riskPercent = isNaN(rawRisk) || rawRisk <= 0 || rawRisk > 5 ? 1 : rawRisk;
+  const settings = readSettings(req);
+  const balanceUsd = settings.currency === "ZAR"
+    ? settings.balance / settings.exchangeRateZarPerUsd
+    : settings.balance;
+  const riskPercent = settings.riskPercent;
 
   // Active trades — comma-separated app symbols, e.g. "EURUSD,XAUUSD"
   const activeTradesParam = req.nextUrl.searchParams.get("activeTrades") ?? "";
@@ -120,7 +122,7 @@ export async function GET(req: NextRequest) {
           entryHigh: raw.entryHigh,
           atr: raw.atr,
           currentPrice,
-          accountBalance: balance,
+          accountBalance: balanceUsd,
           riskPercent: effectiveRisk,
           atrMultiplier: cfg.atrMult,
           minRr: cfg.minRr,
@@ -154,6 +156,8 @@ export async function GET(req: NextRequest) {
           candles: ltf.slice(-140),
           confidence: raw.confidence,
           createdAt: Date.now(),
+          spreadType: "ESTIMATED" as const,
+          spread: currentSpread,
         } satisfies Signal;
       } catch (err) {
         fetchErrors++;
@@ -165,9 +169,8 @@ export async function GET(req: NextRequest) {
 
   // 5. Process Results — sort by confidence, highest confluence first
   const signals = results
-    .filter((r): r is PromiseFulfilledResult<Signal | null> => r.status === "fulfilled")
-    .map((r) => r.value)
-    .filter((s): s is Signal => Boolean(s))
+    .filter((r) => r.status === "fulfilled")
+    .flatMap((r) => r.status === "fulfilled" && r.value ? [r.value as Signal] : [])
     .sort((a, b) => b.confidence - a.confidence);
 
   // Backward-compat: keep `signal` as the top-ranked one.

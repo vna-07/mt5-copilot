@@ -25,10 +25,24 @@ export default function SignalCard({
 
   const copy = async (val: string) => {
     if (isOffline) return;
+    const fallback = () => {
+      const textarea = document.createElement("textarea");
+      textarea.value = val;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    };
     try {
-      await navigator.clipboard.writeText(val);
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(val);
+      else fallback();
       play("copy", "copy");
-    } catch {}
+    } catch {
+      fallback();
+      play("copy", "copy");
+    }
   };
 
   const Tile = ({ label, value, tone }: { label: string; value: string, tone?: "mint"|"coral" }) => (

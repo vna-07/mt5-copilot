@@ -1,8 +1,7 @@
 // lib/types.ts
 // Shared types for the whole app. No logic in here — just shapes.
 
-export type Mode = "scalp" | "intraday" | "synthetic";
-export type ModeOrSwing = Mode | "swing";
+export type Mode = "scalp" | "intraday" | "swing" | "synthetic";
 
 export type Direction = "BUY" | "SELL";
 
@@ -76,4 +75,6 @@ export type Signal = {
   candles: Candle[];
   confidence: number;
   createdAt: number;
+  spreadType?: "LIVE" | "ESTIMATED";
+  spread?: number;
 };

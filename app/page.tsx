@@ -4,11 +4,13 @@ import SignalCard from "@/components/SignalCard";
 import ActiveTradesDrawer from "@/components/ActiveTradesDrawer";
 import SkeletonLoader from "@/components/SkeletonLoader";
 import type { Signal } from "@/lib/types";
-import { Lock } from "lucide-react";
+import type { AccountSettings } from "@/lib/settings";
+import { Lock, Settings as SettingsIcon, X } from "lucide-react";
 
 const MODES = [
   { key: "scalp", label: "Scalping" },
   { key: "intraday", label: "Intraday" },
+  { key: "swing", label: "Swing" },
   { key: "synthetic", label: "Synthetics" },
 ] as const;
 
@@ -20,11 +22,14 @@ export default function Home() {
   const [status, setStatus] = useState<any>(null);
   const [scanning, setScanning] = useState(true);
   const [clock, setClock] = useState("");
+  const [providerName, setProviderName] = useState("demo");
 
   // Safety States
   const [isOffline, setIsOffline] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [lastSaved, setLastSaved] = useState<Signal | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState<AccountSettings | null>(null);
 
   // 1. Live SAST Clock
   useEffect(() => {
@@ -68,6 +73,10 @@ export default function Home() {
     // Load active trades (babysitter state)
     const trades = localStorage.getItem("copilot:activeTrades");
     if (trades) setActiveTrades(JSON.parse(trades));
+    fetch("/api/settings")
+      .then((res) => res.ok ? res.json() : null)
+      .then((json) => { if (json?.settings) setSettings(json.settings); })
+      .catch(() => {});
 
     return () => {
       window.removeEventListener("online", onOnline);
@@ -80,7 +89,7 @@ export default function Home() {
     setScanning(true);
     try {
       const res = await fetch(
-        `/api/scan?mode=${mode}&balance=1000&risk=1&activeTrades=${activeTrades.join(",")}`
+        `/api/scan?mode=${mode}&activeTrades=${activeTrades.join(",")}`
       );
       if (!res.ok) throw new Error("Network response was not ok");
       const json = await res.json();
@@ -88,6 +97,7 @@ export default function Home() {
       const newSignals: Signal[] = json.signals ?? [];
       setSignals(newSignals);
       setStatus(json.status);
+      setProviderName(json.provider ?? "demo");
       setIsOffline(false);
 
       // Clamp active index to valid range — preserves user's viewing position
@@ -115,9 +125,30 @@ export default function Home() {
 
   // 5. Mark a signal as placed — moves it into the babysitter
   const markAsPlaced = (symbol: string) => {
+    if (settings && activeTrades.length >= settings.maxOpenTrades) return;
     const next = [...activeTrades, symbol];
     setActiveTrades(next);
     localStorage.setItem("copilot:activeTrades", JSON.stringify(next));
+    if (signal) {
+      fetch("/api/trades", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trades: [{
+            symbol,
+            entry: signal.entryMid,
+            sl: signal.sl,
+            tp1: signal.tp1,
+            tp2: signal.tp2,
+            tp1Sent: false,
+            tp2Sent: false,
+            slSent: false,
+            closed: false,
+            updatedAt: Date.now(),
+          }],
+        }),
+      }).catch(() => {});
+    }
 
     // Remove from current queue + advance scanning state
     setScanning(true);
@@ -129,6 +160,53 @@ export default function Home() {
   };
 
   const signal = signals[activeIdx] ?? null;
+
+  const saveSettings = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const next: AccountSettings = {
+      balance: Number(form.get("balance")),
+      currency: form.get("currency") === "ZAR" ? "ZAR" : "USD",
+      riskPercent: Number(form.get("riskPercent")),
+      exchangeRateZarPerUsd: Number(form.get("exchangeRateZarPerUsd")),
+      maxOpenTrades: Number(form.get("maxOpenTrades")),
+      brokerProfile: form.get("brokerProfile") as AccountSettings["brokerProfile"],
+    };
+    const res = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      setSettings(json.settings);
+      setShowSettings(false);
+    }
+  };
+
+  const enablePush = async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return;
+    const registration = await navigator.serviceWorker.ready;
+    const keyRes = await fetch("/api/push");
+    const keyJson = await keyRes.json();
+    if (!keyJson.publicKey) return;
+    const applicationServerKey = Uint8Array.from(
+      atob(keyJson.publicKey.replace(/-/g, "+").replace(/_/g, "/"))
+        .split("")
+        .map((char) => char.charCodeAt(0))
+    );
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey,
+    });
+    await fetch("/api/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: subscription.toJSON() }),
+    });
+  };
 
   // Render Privacy Curtain
   if (isLocked) {
@@ -162,6 +240,23 @@ export default function Home() {
           }`}>
             {isOffline ? "● Connection Paused" : status?.deadZone ? "DEAD ZONE" : (status?.active?.[0]?.label || "SCANNING")}
           </div>
+
+          <button
+            onClick={() => setShowSettings(true)}
+            aria-label="Account settings"
+            className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400"
+          >
+            <SettingsIcon size={16} />
+          </button>
+        </div>
+        <div className="mt-2 flex justify-end">
+          <span className={`rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-wider ${
+            providerName === "demo"
+              ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+              : "border-mint/30 bg-mint/10 text-mint"
+          }`}>
+            {providerName === "demo" ? "Demo data • estimated spread" : "Twelve Data • estimated spread"}
+          </span>
         </div>
       </header>
 
@@ -259,6 +354,70 @@ export default function Home() {
 
       {/* The Babysitter Drawer */}
       <ActiveTradesDrawer activeTrades={activeTrades} setActiveTrades={setActiveTrades} />
+
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
+          <form
+            onSubmit={saveSettings}
+            className="w-full max-w-md rounded-t-[32px] border-t border-white/10 bg-canvas p-6 pb-24"
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="label">Account Profile</p>
+                <h2 className="mt-1 text-lg font-bold">Risk & Broker Settings</h2>
+              </div>
+              <button type="button" onClick={() => setShowSettings(false)} className="grid h-10 w-10 place-items-center rounded-full bg-white/5">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="tile">
+                <span className="label">Currency</span>
+                <select name="currency" defaultValue={settings?.currency ?? "USD"} className="mt-2 w-full bg-transparent text-sm text-alabaster">
+                  <option value="USD">USD</option>
+                  <option value="ZAR">ZAR</option>
+                </select>
+              </label>
+              <label className="tile">
+                <span className="label">Balance</span>
+                <input name="balance" type="number" min="1" step="0.01" defaultValue={settings?.balance ?? 1000} className="mt-2 w-full bg-transparent text-sm text-alabaster" />
+              </label>
+              <label className="tile">
+                <span className="label">Risk / Trade</span>
+                <input name="riskPercent" type="number" min="0.1" max="5" step="0.1" defaultValue={settings?.riskPercent ?? 1} className="mt-2 w-full bg-transparent text-sm text-alabaster" />
+              </label>
+              <label className="tile">
+                <span className="label">ZAR / USD</span>
+                <input name="exchangeRateZarPerUsd" type="number" min="1" step="0.01" defaultValue={settings?.exchangeRateZarPerUsd ?? 18.5} className="mt-2 w-full bg-transparent text-sm text-alabaster" />
+              </label>
+              <label className="tile">
+                <span className="label">Max Trades</span>
+                <select name="maxOpenTrades" defaultValue={settings?.maxOpenTrades ?? 3} className="mt-2 w-full bg-transparent text-sm text-alabaster">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                </select>
+              </label>
+              <label className="tile">
+                <span className="label">Broker Profile</span>
+                <select name="brokerProfile" defaultValue={settings?.brokerProfile ?? "other"} className="mt-2 w-full bg-transparent text-sm text-alabaster">
+                  <option value="other">Other / Verify</option>
+                  <option value="deriv_financial">Deriv Financial</option>
+                  <option value="deriv_derived">Deriv Derived</option>
+                </select>
+              </label>
+            </div>
+
+            <button type="submit" className="mt-5 w-full rounded-2xl bg-lavender py-4 text-sm font-bold text-canvas">
+              Save Account Settings
+            </button>
+            <button type="button" onClick={enablePush} className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-slate-300">
+              Enable Trade Notifications
+            </button>
+          </form>
+        </div>
+      )}
     </main>
   );
 }

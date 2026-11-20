@@ -135,6 +135,20 @@ export const WATCHLIST: Instrument[] = [
     sessions: ["asian", "london", "ny", "deadzone"], // Active 24/7
     dataSymbol: "ETH/USD",
   },
+  {
+    symbol: "SOLUSD",
+    mt5Symbol: "SOLUSD",
+    name: "Solana / US Dollar",
+    category: "crypto",
+    digits: 2,
+    pipSize: 0.01,
+    pipValuePerLot: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    maxSpread: 20,
+    sessions: ["asian", "london", "ny", "deadzone"],
+    dataSymbol: "SOL/USD",
+  },
 
   // --- SYNTHETICS ---
   {

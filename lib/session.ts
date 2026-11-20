@@ -227,7 +227,7 @@ export function getStatus(now: Date = new Date()): SessionStatus {
   // Crypto trades 24/7 — always scan it, regardless of session state.
   // This keeps the app useful during the 22:00–23:00 SAST gap (no FX
   // session live) and gives a fallback when FX is quiet.
-  recommended.push("BTCUSD", "ETHUSD");
+  recommended.push("BTCUSD", "ETHUSD", "SOLUSD");
 
   // Deduplicate while preserving order
   const seen = new Set<string>();

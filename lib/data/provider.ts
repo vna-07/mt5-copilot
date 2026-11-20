@@ -11,7 +11,7 @@ export interface DataProvider {
 
 const tfSec = (tf: Timeframe) => (tf === "1h" ? 3600 : tf === "15min" ? 900 : 300);
 
-const BASE: Record<string, number> = { EURUSD: 1.085, GBPUSD: 1.27, USDJPY: 150.2, XAUUSD: 2350, US100: 18500, V25: 2500, STEP: 9000 };
+const BASE: Record<string, number> = { EURUSD: 1.085, GBPUSD: 1.27, USDJPY: 150.2, XAUUSD: 2350, US100: 18500, BTCUSD: 65000, ETHUSD: 3500, SOLUSD: 150, V25: 2500, STEP: 9000 };
 
 function hash(s: string): number { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function mulberry32(a: number) { return function() { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }

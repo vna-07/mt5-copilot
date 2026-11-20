@@ -95,7 +95,27 @@ export function runScan(args: {
     }
   }
 
-  // Engine C: VWAP Mean Reversion
+  // Engine C: Opening Range Breakout
+  if (!direction && args.sessionOpenTs > 0) {
+    const sessionCandles = ltf.filter((x) => x.time >= args.sessionOpenTs).slice(0, 16);
+    if (sessionCandles.length >= 8) {
+      const openingHigh = Math.max(...sessionCandles.map((x) => x.high));
+      const openingLow = Math.min(...sessionCandles.map((x) => x.low));
+      if (c.close > openingHigh && c.close > last(e50)) {
+        direction = "BUY";
+        setup = "Opening Range Breakout";
+        score += 50;
+        reasons.push("Price broke above the session opening range and remains aligned with the 50 EMA.");
+      } else if (c.close < openingLow && c.close < last(e50)) {
+        direction = "SELL";
+        setup = "Opening Range Breakout";
+        score += 50;
+        reasons.push("Price broke below the session opening range and remains aligned with the 50 EMA.");
+      }
+    }
+  }
+
+  // Engine D: VWAP Mean Reversion
   if (!direction && adx < 20 && mode === "intraday") {
     if (p.low <= lowerBand && c.close > lowerBand && rsi < 32) {
       direction = "BUY"; setup = "VWAP Mean Reversion";
