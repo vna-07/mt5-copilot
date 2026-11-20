@@ -22,7 +22,13 @@ function configureWebPush() {
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (cronSecret && req.headers.get("x-cron-secret") !== cronSecret && bearer !== cronSecret) {
+  if (!cronSecret) {
+    return NextResponse.json(
+      { ok: false, error: "CRON_SECRET is not configured." },
+      { status: 503 }
+    );
+  }
+  if (req.headers.get("x-cron-secret") !== cronSecret && bearer !== cronSecret) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
   const pool = getPool();
