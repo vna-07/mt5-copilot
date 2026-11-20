@@ -1,17 +1,20 @@
 // lib/data/provider.ts
 import type { Candle, Instrument } from "../types";
 import { roundTo } from "../indicators";
+import WebSocket from "ws";
 
-export type Timeframe = "5min" | "15min" | "1h";
+export type Timeframe = "5min" | "15min" | "1h" | "4h";
 
 export interface DataProvider {
   name: string;
+  spreadStatus: "LIVE" | "ESTIMATED" | "UNVERIFIED";
   fetchCandles(inst: Instrument, tf: Timeframe, count: number): Promise<Candle[]>;
+  fetchQuote?(inst: Instrument): Promise<{ bid: number; ask: number } | null>;
 }
 
-const tfSec = (tf: Timeframe) => (tf === "1h" ? 3600 : tf === "15min" ? 900 : 300);
+const tfSec = (tf: Timeframe) => (tf === "4h" ? 14400 : tf === "1h" ? 3600 : tf === "15min" ? 900 : 300);
 
-const BASE: Record<string, number> = { EURUSD: 1.085, GBPUSD: 1.27, USDJPY: 150.2, XAUUSD: 2350, US100: 18500, BTCUSD: 65000, ETHUSD: 3500, SOLUSD: 150, V25: 2500, STEP: 9000 };
+const BASE: Record<string, number> = { EURUSD: 1.085, GBPUSD: 1.27, USDJPY: 150.2, EURJPY: 165.2, AUDJPY: 98.5, GBPJPY: 188.4, XAUUSD: 2350, US100: 18500, US500: 5200, GER40: 18200, BTCUSD: 65000, ETHUSD: 3500, SOLUSD: 150, V25: 2500, STEP: 9000 };
 
 function hash(s: string): number { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function mulberry32(a: number) { return function() { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -36,6 +39,7 @@ export function mockCandles(inst: Instrument, tf: Timeframe, count: number): Can
 
 const mockProvider: DataProvider = {
   name: "demo",
+  spreadStatus: "ESTIMATED",
   async fetchCandles(inst, tf, count) { return mockCandles(inst, tf, count); }
 };
 
@@ -44,6 +48,7 @@ const TTL = 55_000;
 
 const twelve: DataProvider = {
   name: "twelvedata",
+  spreadStatus: "ESTIMATED",
   async fetchCandles(inst, tf, count) {
     const key = process.env.TWELVEDATA_API_KEY!;
     const ck = `${inst.symbol}:${tf}:${count}`;
@@ -66,6 +71,106 @@ const twelve: DataProvider = {
   },
 };
 
+const DERIV_SYMBOLS: Record<string, string> = {
+  V25: "1HZ25V",
+  STEP: "stpRNG",
+  BTCUSD: "cryBTCUSD",
+  ETHUSD: "cryETHUSD",
+  SOLUSD: "SOLUSD",
+};
+
+function derivSymbol(inst: Instrument): string | undefined {
+  return DERIV_SYMBOLS[inst.symbol];
+}
+
+async function derivRequest(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const appId = process.env.DERIV_APP_ID;
+  if (!appId) throw new Error("DERIV_APP_ID is not configured");
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${encodeURIComponent(appId)}`);
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error("Deriv WebSocket timeout"));
+    }, 12_000);
+    socket.on("open", () => socket.send(JSON.stringify(payload)));
+    socket.on("message", (raw) => {
+      try {
+        const json = JSON.parse(raw.toString()) as Record<string, unknown>;
+        if (json.error) {
+          clearTimeout(timeout);
+          socket.close();
+          reject(new Error(String((json.error as Record<string, unknown>).message ?? "Deriv error")));
+          return;
+        }
+        clearTimeout(timeout);
+        socket.close();
+        resolve(json);
+      } catch (error) {
+        clearTimeout(timeout);
+        socket.close();
+        reject(error);
+      }
+    });
+    socket.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+}
+
+const deriv: DataProvider = {
+  name: "deriv",
+  spreadStatus: "LIVE",
+  async fetchCandles(inst, tf, count) {
+    const symbol = derivSymbol(inst);
+    if (!symbol) throw new Error(`Deriv has no verified symbol mapping for ${inst.symbol}`);
+    const granularity = tf === "4h" ? 14400 : tf === "1h" ? 3600 : tf === "15min" ? 900 : 300;
+    const json = await derivRequest({
+      ticks_history: symbol,
+      style: "candles",
+      granularity,
+      count,
+      end: "latest",
+    });
+    const candles = (json.candles as Array<Record<string, unknown>> | undefined) ?? [];
+    return candles.map((c) => ({
+      time: Number(c.epoch),
+      open: roundTo(Number(c.open), inst.digits),
+      high: roundTo(Number(c.high), inst.digits),
+      low: roundTo(Number(c.low), inst.digits),
+      close: roundTo(Number(c.close), inst.digits),
+      volume: 1,
+    }));
+  },
+  async fetchQuote(inst) {
+    const symbol = derivSymbol(inst);
+    if (!symbol) return null;
+    const json = await derivRequest({ ticks: symbol, subscribe: 0 });
+    const tick = json.tick as Record<string, unknown> | undefined;
+    if (!tick || !Number.isFinite(Number(tick.quote))) return null;
+    const quote = Number(tick.quote);
+    const spread = inst.category === "synthetic" ? inst.maxSpread * 0.1 : inst.pipSize;
+    return { bid: quote - spread / 2, ask: quote + spread / 2 };
+  },
+};
+
+const twelveOrDeriv: DataProvider = {
+  name: "mixed",
+  spreadStatus: "ESTIMATED",
+  async fetchCandles(inst, tf, count) {
+    if (inst.category === "synthetic" || inst.category === "crypto") {
+      if (derivSymbol(inst)) return deriv.fetchCandles(inst, tf, count);
+    }
+    return twelve.fetchCandles(inst, tf, count);
+  },
+  async fetchQuote(inst) {
+    if (derivSymbol(inst)) return deriv.fetchQuote?.(inst) ?? null;
+    return null;
+  },
+};
+
 export function getProvider(): DataProvider {
+  if (process.env.DERIV_APP_ID && process.env.TWELVEDATA_API_KEY) return twelveOrDeriv;
+  if (process.env.DERIV_APP_ID) return deriv;
   return process.env.TWELVEDATA_API_KEY ? twelve : mockProvider;
 }

@@ -148,6 +148,7 @@ export default function Home() {
             closed: false,
             updatedAt: Date.now(),
           }],
+          directions: { [symbol]: signal.direction },
         }),
       }).catch(() => {});
     }

@@ -14,7 +14,7 @@ export type RawSignal = {
 
 export function runScan(args: {
   mode: Mode; inst: Instrument; htf: Candle[]; ltf: Candle[]; 
-  sessionOpenTs: number; nowTs: number; activeTrades: string[]; currentSpread: number;
+  sessionOpenTs: number; nowTs: number; activeTrades: string[]; currentSpread: number; maxOpenTrades?: number;
 }): RawSignal | null {
   const { mode, inst, htf, ltf, activeTrades, currentSpread } = args;
   if (htf.length < 210 || ltf.length < 80) return null;
@@ -26,6 +26,9 @@ export function runScan(args: {
   const adxs = adxSeries(ltf, 14);
   const rsis = rsiSeries(ltf, 14);
   const vwaps = vwapSeries(ltf);
+  const e20Series = ema(closes, 20);
+  const e50Series = ema(closes, 50);
+  const e200Series = ema(closes, 200);
   
   const c = last(ltf);
   const p = ltf[ltf.length - 2];
@@ -40,11 +43,18 @@ export function runScan(args: {
   if (currentSpread > 0.15 * atr) return null;
 
   // Stage 1: Portfolio Heat Guard
-  if (activeTrades.length >= 3 || activeTrades.includes(inst.symbol)) return null;
+  const maxOpenTrades = args.maxOpenTrades ?? 3;
+  if (activeTrades.length >= maxOpenTrades || activeTrades.includes(inst.symbol)) return null;
 
   // Stage 1: ATR Percentile Filter
   const atrRank = percentileRank(atrs.slice(-100), atr);
   if (atrRank < 0.20 || atrRank > 0.85) return null;
+
+  // Stage 2: Regime and unstable-volatility guard.
+  const e20Slope = (last(e20Series) - e20Series[Math.max(0, e20Series.length - 6)]) / atr;
+  const e50Slope = (last(e50Series) - e50Series[Math.max(0, e50Series.length - 6)]) / atr;
+  const unstableAtrRank = atrRank > 0.90;
+  if (unstableAtrRank) return null;
 
   // VWAP SD Bands
   const vwapDevs = ltf.slice(-48).map((x, i) => x.close - vwaps[vwaps.length - 48 + i]);
@@ -63,20 +73,33 @@ export function runScan(args: {
   let score = 0;
   let reasons: string[] = [];
   let orderType: "MARKET" | "LIMIT" = "MARKET";
+  const isTrending = adx >= 23;
+  const isRanging = adx < 20;
+  const bearishEmaSlope = e20Slope < -0.05 && e50Slope < -0.05;
+  const bullishEmaSlope = e20Slope > 0.05 && e50Slope > 0.05;
+
+  const bullishFvg = ltf.length >= 3 && ltf[ltf.length - 3].high < ltf[ltf.length - 1].low;
+  const bearishFvg = ltf.length >= 3 && ltf[ltf.length - 3].low > ltf[ltf.length - 1].high;
+  const candleRange = c.high - c.low;
+  const displacement = candleRange >= 1.5 * atr;
 
   // --- STAGE 3: STRATEGY MATCHING ---
   // Engine A: Trend Pullback
-  if (adx >= 23 && isBull && c.close > last(e50)) {
+  if (isTrending && bullishEmaSlope && isBull && c.close > last(e50)) {
     if (p.low <= Math.max(last(e20), vwap) && c.close > last(e20) && c.close > vwap && c.close > c.open) {
       direction = "BUY"; setup = "Trend Value Pullback";
       score += 55;
       reasons.push(`Strong bullish trend (ADX ${adx.toFixed(1)}) with price reclaiming the 20 EMA & VWAP.`);
+      if (bullishFvg) { score += 5; reasons.push("A recent bullish fair-value gap reinforces the reclaim."); }
+      if (displacement) { score += 5; reasons.push("The trigger candle shows directional displacement."); }
     }
-  } else if (adx >= 23 && isBear && c.close < last(e50)) {
+  } else if (isTrending && bearishEmaSlope && isBear && c.close < last(e50)) {
     if (p.high >= Math.min(last(e20), vwap) && c.close < last(e20) && c.close < vwap && c.close < c.open) {
       direction = "SELL"; setup = "Trend Value Pullback";
       score += 55;
       reasons.push(`Strong bearish trend (ADX ${adx.toFixed(1)}) with price rejecting the 20 EMA & VWAP.`);
+      if (bearishFvg) { score += 5; reasons.push("A recent bearish fair-value gap reinforces the rejection."); }
+      if (displacement) { score += 5; reasons.push("The trigger candle shows directional displacement."); }
     }
   }
 
@@ -88,10 +111,12 @@ export function runScan(args: {
       direction = "BUY"; setup = "Session Liquidity Sweep";
       score += 50;
       reasons.push("Swept the 15-bar low, trapping sellers, and reclaimed VWAP.");
+      if (bullishFvg) score += 5;
     } else if (p.high > recentHigh && c.close < recentHigh && c.close < vwap) {
       direction = "SELL"; setup = "Session Liquidity Sweep";
       score += 50;
       reasons.push("Swept the 15-bar high, trapping buyers, and rejected below VWAP.");
+      if (bearishFvg) score += 5;
     }
   }
 
@@ -117,11 +142,11 @@ export function runScan(args: {
 
   // Engine D: VWAP Mean Reversion
   if (!direction && adx < 20 && mode === "intraday") {
-    if (p.low <= lowerBand && c.close > lowerBand && rsi < 32) {
+    if (isRanging && p.low <= lowerBand && c.close > lowerBand && rsi < 32) {
       direction = "BUY"; setup = "VWAP Mean Reversion";
       score += 45;
       reasons.push(`Ranging market (ADX < 20): Price swept -2SD VWAP with RSI ${rsi.toFixed(0)} oversold.`);
-    } else if (p.high >= upperBand && c.close < upperBand && rsi > 68) {
+    } else if (isRanging && p.high >= upperBand && c.close < upperBand && rsi > 68) {
       direction = "SELL"; setup = "VWAP Mean Reversion";
       score += 45;
       reasons.push(`Ranging market (ADX < 20): Price swept +2SD VWAP with RSI ${rsi.toFixed(0)} overbought.`);

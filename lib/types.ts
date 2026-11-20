@@ -37,6 +37,8 @@ export type Instrument = {
   maxSpread: number;
   sessions: SessionKey[];
   dataSymbol: string;
+  brokerProfiles?: ("deriv_financial" | "deriv_derived" | "other")[];
+  contractVerified?: boolean;
 };
 
 /** One step in the MT5 Mobile walkthrough. */

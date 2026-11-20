@@ -16,7 +16,7 @@ export const maxDuration = 30;
 const MODE_CFG: Record<Mode, { ltf: Timeframe; atrMult: number; minRr: number }> = {
   scalp: { ltf: "5min", atrMult: 1.0, minRr: 1.5 },
   intraday: { ltf: "15min", atrMult: 1.5, minRr: 2.0 },
-  swing: { ltf: "1h", atrMult: 2.0, minRr: 2.5 },
+  swing: { ltf: "4h", atrMult: 2.0, minRr: 2.5 },
   synthetic: { ltf: "5min", atrMult: 1.5, minRr: 1.5 },
 };
 
@@ -68,6 +68,7 @@ export async function GET(req: NextRequest) {
     : status.recommended
         .map(bySymbol)
         .filter((i): i is NonNullable<typeof i> => Boolean(i))
+        .filter((i) => !i.brokerProfiles || i.brokerProfiles.includes(settings.brokerProfile))
         .slice(0, MAX_SYMBOLS);
 
   if (!candidates.length) {
@@ -99,12 +100,13 @@ export async function GET(req: NextRequest) {
           return null;
         }
         const [htf, ltf] = await Promise.all([
-          provider.fetchCandles(inst, "1h", 220),
+          provider.fetchCandles(inst, mode === "swing" ? "4h" : "1h", 220),
           provider.fetchCandles(inst, cfg.ltf, 320),
         ]);
-
-        // Live spread: use provider value if exposed, else simulate ~20% of max
-        const currentSpread = (inst as any).currentSpread ?? inst.maxSpread * 0.2;
+        const quote = provider.fetchQuote ? await provider.fetchQuote(inst) : null;
+        const liveSpread = quote ? Math.abs(quote.ask - quote.bid) : null;
+        const currentSpread = liveSpread ?? inst.maxSpread * 0.2;
+        const spreadStatus = liveSpread ? "LIVE" : provider.spreadStatus;
 
         const raw = runScan({
           mode, inst, htf, ltf,
@@ -112,6 +114,7 @@ export async function GET(req: NextRequest) {
           nowTs,
           activeTrades,
           currentSpread,
+          maxOpenTrades: settings.maxOpenTrades,
         });
         if (!raw || raw.confidence < 0.7) return null;
 
@@ -164,7 +167,7 @@ export async function GET(req: NextRequest) {
           candles: ltf.slice(-140),
           confidence: raw.confidence,
           createdAt: Date.now(),
-          spreadType: "ESTIMATED" as const,
+          spreadType: (liveSpread ? "LIVE" : "ESTIMATED") as "LIVE" | "ESTIMATED",
           spread: currentSpread,
         } satisfies Signal;
       } catch (err) {

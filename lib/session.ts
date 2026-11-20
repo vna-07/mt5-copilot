@@ -98,7 +98,7 @@ export const SESSIONS: SessionWindow[] = [
     key: "london",
     label: "London Session",
     startMin: 540,          // 09:00 SAST
-    endMin: 960,            // 16:00 SAST
+    endMin: 870,            // 14:30 SAST
     primeStartMin: 600,     // 10:00 SAST
     primeEndMin: 720,       // 12:00 SAST
     symbols: ["EURUSD", "GBPUSD", "XAUUSD"],
@@ -108,7 +108,7 @@ export const SESSIONS: SessionWindow[] = [
   {
     key: "ny",
     label: "New York / Overlap",
-    startMin: 930,          // 15:30 SAST
+    startMin: 870,          // 14:30 SAST
     endMin: 1320,           // 22:00 SAST
     primeStartMin: 930,     // 15:30 SAST
     primeEndMin: 1110,      // 18:30 SAST

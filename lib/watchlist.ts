@@ -16,6 +16,8 @@ export const WATCHLIST: Instrument[] = [
     maxSpread: 1.5,
     sessions: ["london", "ny"],
     dataSymbol: "EUR/USD",
+    brokerProfiles: ["deriv_financial", "other"],
+    contractVerified: false,
   },
   {
     symbol: "GBPUSD",
@@ -30,6 +32,8 @@ export const WATCHLIST: Instrument[] = [
     maxSpread: 2.0,
     sessions: ["london"],
     dataSymbol: "GBP/USD",
+    brokerProfiles: ["deriv_financial", "other"],
+    contractVerified: false,
   },
   {
     symbol: "USDJPY",
@@ -58,6 +62,38 @@ export const WATCHLIST: Instrument[] = [
     maxSpread: 3.0,
     sessions: ["london"],
     dataSymbol: "GBP/JPY",
+    brokerProfiles: ["deriv_financial", "other"],
+    contractVerified: false,
+  },
+  {
+    symbol: "EURJPY",
+    mt5Symbol: "EURJPY",
+    name: "Euro / Japanese Yen",
+    category: "forex",
+    digits: 3,
+    pipSize: 0.01,
+    pipValuePerLot: 6.7,
+    minLot: 0.01,
+    lotStep: 0.01,
+    maxSpread: 3.0,
+    sessions: ["asian", "london"],
+    dataSymbol: "EUR/JPY",
+  },
+  {
+    symbol: "AUDJPY",
+    mt5Symbol: "AUDJPY",
+    name: "Australian Dollar / Japanese Yen",
+    category: "forex",
+    digits: 3,
+    pipSize: 0.01,
+    pipValuePerLot: 6.7,
+    minLot: 0.01,
+    lotStep: 0.01,
+    maxSpread: 3.0,
+    sessions: ["asian"],
+    dataSymbol: "AUD/JPY",
+    brokerProfiles: ["deriv_financial", "other"],
+    contractVerified: false,
   },
 
   // --- METALS ---
@@ -74,6 +110,8 @@ export const WATCHLIST: Instrument[] = [
     maxSpread: 30,
     sessions: ["london", "ny"],
     dataSymbol: "XAU/USD",
+    brokerProfiles: ["deriv_financial", "other"],
+    contractVerified: false,
   },
 
   // --- INDICES ---
@@ -90,6 +128,8 @@ export const WATCHLIST: Instrument[] = [
     maxSpread: 2.5,
     sessions: ["ny"],
     dataSymbol: "NDX",
+    brokerProfiles: ["deriv_financial", "other"],
+    contractVerified: false,
   },
   {
     symbol: "GER40",
@@ -104,6 +144,24 @@ export const WATCHLIST: Instrument[] = [
     maxSpread: 2.0,
     sessions: ["london"],
     dataSymbol: "DAX",
+    brokerProfiles: ["deriv_financial", "other"],
+    contractVerified: false,
+  },
+  {
+    symbol: "US500",
+    mt5Symbol: "US500",
+    name: "S&P 500 Index",
+    category: "index",
+    digits: 1,
+    pipSize: 1,
+    pipValuePerLot: 1,
+    minLot: 0.01,
+    lotStep: 0.01,
+    maxSpread: 3.0,
+    sessions: ["ny"],
+    dataSymbol: "SPX",
+    brokerProfiles: ["deriv_financial", "other"],
+    contractVerified: false,
   },
 
   // --- CRYPTO (24/7) ---
@@ -120,6 +178,8 @@ export const WATCHLIST: Instrument[] = [
     maxSpread: 50,
     sessions: ["asian", "london", "ny", "deadzone"], // Active 24/7
     dataSymbol: "BTC/USD",
+    brokerProfiles: ["deriv_financial", "deriv_derived", "other"],
+    contractVerified: false,
   },
   {
     symbol: "ETHUSD",
@@ -148,6 +208,8 @@ export const WATCHLIST: Instrument[] = [
     maxSpread: 20,
     sessions: ["asian", "london", "ny", "deadzone"],
     dataSymbol: "SOL/USD",
+    brokerProfiles: ["deriv_financial", "deriv_derived", "other"],
+    contractVerified: false,
   },
 
   // --- SYNTHETICS ---
@@ -164,6 +226,8 @@ export const WATCHLIST: Instrument[] = [
     maxSpread: 5,
     sessions: ["deadzone"],
     dataSymbol: "V25",
+    brokerProfiles: ["deriv_derived"],
+    contractVerified: false,
   },
   {
     symbol: "STEP",
@@ -178,6 +242,8 @@ export const WATCHLIST: Instrument[] = [
     maxSpread: 5,
     sessions: ["deadzone"],
     dataSymbol: "STEP",
+    brokerProfiles: ["deriv_derived"],
+    contractVerified: false,
   },
 ];
 

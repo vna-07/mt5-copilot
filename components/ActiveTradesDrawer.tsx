@@ -13,6 +13,7 @@ export default function ActiveTradesDrawer({ activeTrades, setActiveTrades }: { 
     const next = activeTrades.filter(s => s !== sym);
     setActiveTrades(next);
     localStorage.setItem("copilot:activeTrades", JSON.stringify(next));
+    fetch(`/api/trades?symbol=${encodeURIComponent(sym)}`, { method: "DELETE" }).catch(() => {});
     play("unlock", "unlock");
   };
 

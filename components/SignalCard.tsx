@@ -82,6 +82,15 @@ export default function SignalCard({
       <div className="bento">
         <TradeChart id={signal.id} candles={signal.candles} entry={signal.entryMid} sl={signal.sl} tp1={signal.tp1} tp2={signal.tp2} />
 
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-[10px] font-bold uppercase tracking-wider">
+          <span className={signal.spreadType === "LIVE" ? "text-mint" : "text-amber-300"}>
+            Spread: {signal.spreadType ?? "ESTIMATED"}
+          </span>
+          {typeof signal.spread === "number" && (
+            <span className="num text-slate-400">{signal.spread.toFixed(signal.digits)} {signal.symbol}</span>
+          )}
+        </div>
+
         <div className="grid grid-cols-2 gap-2 mt-4">
           <Tile label="Lot Size" value={signal.lotSize.toFixed(2)} />
           <Tile label="Entry Price" value={f(signal.entryMid, d)} />

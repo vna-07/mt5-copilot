@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import webPush from "web-push";
 import type { PushSubscriptionPayload } from "@/lib/push";
+import { accountKey, ensureSchema, getPool } from "@/lib/db";
 
 const COOKIE = "copilot_push";
 
@@ -25,6 +26,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     if (body.subscription) {
       const subscription = body.subscription as PushSubscriptionPayload;
+      const pool = getPool();
+      if (pool) {
+        await ensureSchema();
+        await pool.query(
+          `insert into push_subscriptions(account_key,subscription)
+           values($1,$2::jsonb)
+           on conflict(account_key) do update set subscription=excluded.subscription,updated_at=now()`,
+          [accountKey(req), JSON.stringify(subscription)]
+        );
+      }
       const res = NextResponse.json({ ok: true });
       res.cookies.set(COOKIE, Buffer.from(JSON.stringify(subscription)).toString("base64url"), {
         httpOnly: true,
